@@ -134,6 +134,15 @@ class Path {
 		path.child_path = path_to_append;
 		path_to_append.parent_path = path;
 	}
+	
+	function Remove() {
+		if (parent_path != null) {
+			parent_path.child_path = child_path;
+		}
+		if (child_path != null) {
+			child_path.parent_path = parent_path;
+		}		
+	}
 }
 
 class AStar {

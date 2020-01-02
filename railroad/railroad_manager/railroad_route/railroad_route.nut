@@ -38,11 +38,6 @@ class RailroadRoute {
 	static function CalculateNumberOfWagons(depot_tile , locomotive_engine , wagon_engine , plataform_length);
 	static function ChooseWagon(cargo , rail_type);
 	static function ChooseLocomotive(cargo , rail_type , locomotive_max_price);
-	static function Compare(a , b){
-		if(a == null && b == null) return 0;
-		else if(a == null) return 1;
-		return -1;
-	}
 	static function GetEvaluatedLocomotiveEnginesList(cargo , rail_type , locomotive_max_price);
 	static function GetTotalNumberOfTrains();
 	static function SetTrainOrders(locomotive , station1_tile , depot1_tile , order_flags1 ,

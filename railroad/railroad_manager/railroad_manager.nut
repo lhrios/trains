@@ -590,13 +590,7 @@ function RailroadManager::MaintainRailroadRoutes(self){
 
 	/* Remove the demolished railroad routes from the array of routes.*/
 	if(demolished_some_railroad_route){
-		railroad_routes.sort(RailroadRoute.Compare);
-		while(railroad_routes.len() > 0 && railroad_routes[railroad_routes.len() - 1] == null)
-			railroad_routes.pop();
-		/* Debug: */
-		foreach(railroad_route in railroad_routes){
-			assert(railroad_route != null);
-		}
+		Array.removeNull(railroad_routes);
 	}
 
 	return false;
@@ -619,7 +613,7 @@ function RailroadManager::InvestMoneyOnRailroads(self){
 	if(reservation_id != null){
 		local r = AIBase.RandRange(4);
 
-	//passar para o CanInvestMoneyOnTown
+	/* TODO Move to CanInvestMoneyOnTown. */
 		if(r != 0 || railroad_routes.len() < MIN_INDUSTRY_INDUSTRY_ROUTES_BEFORE_TOWN_TOWN_ROUTE){
 			aux = InvestMoneyOnIndustry(true , reservation_id);
 		}

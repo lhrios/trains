@@ -1,6 +1,6 @@
 /*
  * trAIns - An AI for OpenTTD
- * Copyright (C) 2009  Luis Henrique O. Rios
+ * Copyright (C) 2009, 2014  Luis Henrique O. Rios
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,21 +17,28 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
+class Array{
+	/* Public. */
+	/* Removes the null elements without changing the order of non-null elements. */
+	static function removeNull(array);
+}
 
-class Pair {
-	first = null;
-	second = null;
-
-	constructor( first = null , second = null ){
-		this.first = first;
-		this.second = second;
+/* TODO: Is there no better implementation? */
+function Array::removeNull(array){
+	local new_array = [];
+	for (local i = 0; i < array.len(); i++) {
+		if (array[i] != null) {
+			new_array.push(array[i]);
+		}
 	}
-
-	function _typeof(){
-		return "Pair";
+	for (local i = 0; i < new_array.len(); i++) {
+		array[i] = new_array[i];
 	}
-	
-	function _tostring(){
-		return "Pair(" + first + "," + second + ")";
+	array.resize(new_array.len())
+}
+
+function Array::appendArray(array, array_to_be_appended){
+	foreach (e in array_to_be_appended) {
+		array.append(e);
 	}
 }

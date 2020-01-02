@@ -38,7 +38,7 @@ class trAIns extends AIInfo {
       return false;
    }
    function GetDate(){
-		return "2010-07-02";
+		return "2014_02_14";
 	}
    function CreateInstance(){
 		return "trAIns";
@@ -55,7 +55,7 @@ class trAIns extends AIInfo {
 		return true;
 	}
 	function GetURL(){
-		return "http://www.dcc.ufmg.br/~lhrios/trains/";
+		return "http://www.luisrios.eti.br/public/en_us/research/trains/";
 	}
 };
 

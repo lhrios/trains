@@ -36,6 +36,25 @@ class BridgeInformation {
 			" exit_tile: " + Tile.ToString(exit_tile) +
 			" part_index: " + ::ai_instance.dtp.ToString(part_index);
 	}
+	
+	function CanBeCoalesced(bridge_information) {
+		if ((Tile.DistanceX(exit_tile, bridge_information.start_tile) < DoubleRailroadBuilder.MAX_DISTANCE_TO_TRIE_COALESCENCE
+				&& Tile.DistanceY(exit_tile, bridge_information.start_tile) == 0) 
+				|| (Tile.DistanceY(exit_tile, bridge_information.start_tile) < DoubleRailroadBuilder.MAX_DISTANCE_TO_TRIE_COALESCENCE 
+				&& Tile.DistanceX(exit_tile, bridge_information.start_tile) == 0)) {
+		
+			assert (part_index == bridge_information.part_index);
+			assert (secondary_rail_offset == bridge_information.secondary_rail_offset);
+			return true;			
+		}
+		return false;
+	}
+	
+	function Coalesce(bridge_information) {
+		exit_tile = bridge_information.exit_tile;
+		Array.appendArray(primary_bridges, bridge_information.primary_bridges);
+		Array.appendArray(secondary_bridges, bridge_information.secondary_bridges);
+	}	
 }
 
 class DoubleRailroad {
@@ -76,7 +95,8 @@ class DoubleRailroadBuilder {
 	/* Private: */
 	/* Constants: */
 	static PART_COST = 1;
-	static BRIDGE_MAX_LENGTH = 15;
+	static BRIDGE_MAX_LENGTH = 30;
+	static MAX_DISTANCE_TO_TRIE_COALESCENCE = 3;
 
 	static PATHFINDING_TIME_OUT = (365 * 2.5).tointeger();/* days. */
 	static PATHFINDING_INTERVAL = 30;
@@ -105,7 +125,8 @@ class DoubleRailroadBuilder {
 	function GetNeighbours(node , self);
 	function EndNode(node , self);
 	function LandToBuildBridgeOver(tile);
-
+	function PostProcessing(path);
+	function IntraPartBridgeCoalescence(path);
 }
 
 class BridgeValuator {
@@ -181,7 +202,6 @@ function DoubleRailroadBuilder::DemolishBridge(bridge_information){
 	}
 }
 
-/* TODO: Use signals in the bridge.*/
 function DoubleRailroadBuilder::BuildBridge(bridge_information){
 	local dtp = ::ai_instance.dtp;
 	local primary_tile = bridge_information.start_tile;
@@ -234,6 +254,70 @@ function DoubleRailroadBuilder::BuildBridge(bridge_information){
 	}
 	return true;
 }
+
+function DoubleRailroadBuilder::BuildBridgeSignals(bridge_information, interval, last_signal){
+	local dtp = ::ai_instance.dtp;
+	local primary_tile = bridge_information.start_tile;
+	local secondary_tile = primary_tile + bridge_information.secondary_rail_offset;
+	local next_tile = dtp.parts[bridge_information.part_index].next_tile;
+	local rail_track = dtp.parts[bridge_information.part_index].sections[0].track;
+	local signal_senses = dtp.parts[bridge_information.part_index].signal_senses;
+	local i = 0;
+	local j = last_signal;
+
+	do {
+		local must_build_signal = !AIBridge.IsBridgeTile(primary_tile) && (j % interval == 0 
+			/* Next is a bridge start. */
+			|| (i < bridge_information.primary_bridges.len() && primary_tile + next_tile == bridge_information.primary_bridges[i].first));
+			
+		if (must_build_signal) {
+			if(!RailroadCommon.BuildSignal(primary_tile, rail_track, signal_senses[0], AIRail.SIGNALTYPE_NORMAL)) {
+				return false;
+			}
+		}
+			
+		if(i < bridge_information.primary_bridges.len() &&
+			primary_tile == bridge_information.primary_bridges[i].first){
+			local pair = bridge_information.primary_bridges[i];				
+			primary_tile = pair.second + next_tile;
+			i++;
+			j = 0;
+		}else{
+			primary_tile += next_tile;
+			j++;
+		}
+		
+	} while(primary_tile != bridge_information.exit_tile + next_tile);
+	
+	i = 0;
+	j = last_signal;
+	do {
+		local must_build_signal = !AIBridge.IsBridgeTile(secondary_tile) && (j % interval == 0 
+			/* Next is a bridge start. */
+			|| (i < bridge_information.secondary_bridges.len() && secondary_tile + next_tile == bridge_information.secondary_bridges[i].first));
+			
+		if (must_build_signal) {
+			if(!RailroadCommon.BuildSignal(secondary_tile, rail_track, signal_senses[1], AIRail.SIGNALTYPE_NORMAL)) {
+			 	return false;
+			}
+		}
+			
+		if(i < bridge_information.secondary_bridges.len() &&
+			secondary_tile == bridge_information.secondary_bridges[i].first){
+			local pair = bridge_information.secondary_bridges[i];				
+			secondary_tile = pair.second + next_tile;
+			i++;
+			j = 0;
+		}else{
+			secondary_tile += next_tile;
+			j++;
+		}
+		
+	} while(secondary_tile != bridge_information.exit_tile + next_tile + bridge_information.secondary_rail_offset);
+
+	return true;
+}
+
 
 function DoubleRailroadBuilder::ConvertBridge(bridge_information , rail_type){
 	local dtp = ::ai_instance.dtp;
@@ -606,6 +690,8 @@ function DoubleRailroadBuilder::BuildSignals(path , interval){
 				must_build_signal = false;
 				i = 0;
 			}
+		} else if (part_index == DoubleTrackParts.BRIDGE) {
+			BuildBridgeSignals(path.user_data, interval, i);
 		}
 
 		path = next_path;
@@ -637,6 +723,8 @@ function DoubleRailroadBuilder::BuildTrack() {
 			LogMessagesManager.PrintLogMessage("DoubleRailroadBuilder::BuildTrack: Found a path (" +
 				(AIDate.GetCurrentDate() - start_date) + " days) (" +
 				(::ai_instance.GetTick() - start_tick) + " ticks).");
+
+			PostProcessing(path);
 
 			first_path = path;
 			while(path != null && !problem){
@@ -739,3 +827,79 @@ function DoubleRailroadBuilder::BuildTrack() {
 
 	return double_railroad;
 }
+
+function DoubleRailroadBuilder::PostProcessing(path) {
+	/* Tries to find consecutive bridges and collapse them into a single one. */
+	while (path != null) {
+		/* Is it a bridge? */
+		if(path.part_index == DoubleTrackParts.BRIDGE){
+			local bridge_information2 = path.user_data;
+			/* TODO: We can make this generic. */
+			if (path.child_path != null && path.child_path.part_index == DoubleTrackParts.BRIDGE
+					&& path.user_data.CanBeCoalesced(path.child_path.user_data)) {
+					
+				path.user_data.Coalesce(path.child_path.child_path.user_data);
+				
+				path.child_path.Remove();
+				
+			} else if (path.child_path != null && path.child_path.child_path != null
+					&& path.child_path.child_path.part_index == DoubleTrackParts.BRIDGE 
+					&& path.user_data.CanBeCoalesced(path.child_path.child_path.user_data)) {
+						
+				path.user_data.Coalesce(path.child_path.child_path.user_data);
+				
+				path.child_path.Remove();
+				path.child_path.Remove();
+
+			} else if (path.child_path != null && path.child_path.child_path != null && path.child_path.child_path.child_path != null
+					&& path.child_path.child_path.child_path.part_index == DoubleTrackParts.BRIDGE 
+					&& path.user_data.CanBeCoalesced(path.child_path.child_path.child_path.user_data)) {
+										
+				path.user_data.Coalesce(path.child_path.child_path.child_path.user_data);
+				
+				path.child_path.Remove();
+				path.child_path.Remove();
+				path.child_path.Remove();
+			}
+			
+			IntraPartBridgeCoalescence(path);
+		}
+		path = path.child_path;
+	}
+}
+
+function DoubleRailroadBuilder::IntraPartBridgeCoalescence(path) {
+	assert (path.part_index == DoubleTrackParts.BRIDGE);
+	
+	local ai_test_mode = AITestMode();
+	local bridge_information = path.user_data;
+	local primary_bridges = bridge_information.primary_bridges;
+	local secondary_bridges = bridge_information.secondary_bridges;
+
+	local collapseOneSide = function(bridges) {
+		local i = 0;
+		local j = 1;
+		while (j < bridges.len()) {
+			local start_i = bridges[i].first;
+			local end_i = bridges[i].second;
+			local start_j = bridges[j].first;
+			local end_j = bridges[j].second;
+			
+			if (AIMap.DistanceManhattan(end_i, start_j) <= MAX_DISTANCE_TO_TRIE_COALESCENCE && AIMap.DistanceManhattan(start_i, end_j) <= BRIDGE_MAX_LENGTH 
+					&& AIBridge.BuildBridge(AIVehicle.VT_RAIL , 0 , start_i , end_j)) {	
+				bridges[i].second = bridges[j].second; 
+				bridges[j] = null;
+				j++;
+			} else {
+				i = j;
+				j++;	
+			}
+		}
+		Array.removeNull(bridges);
+	};
+
+	collapseOneSide(primary_bridges);
+	collapseOneSide(secondary_bridges);
+}
+
+

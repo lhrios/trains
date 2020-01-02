@@ -24,6 +24,9 @@ class Tile {
 	static function EuclideanDistance(t1 , t2);
 	static function GetFlatSlopeTileHeight(tile);
 	static function SetTileCornerHeight(tile , corner , height);
+	
+	static function DistanceX(t1, t2);
+	static function DistanceY(t1, t2);
 
 	static neighbours_tiles_offset = [[0 , 0] , [0 , 1] , [1 , 0] , [1 , 1]];
 }
@@ -139,6 +142,14 @@ function Tile::GetFlatTile(tile , max_radius = 25){
 		}
 	}
 	return null;
+}
+
+function Tile::DistanceX(t1, t2){
+	return abs(AIMap.GetTileX(t1) - AIMap.GetTileX(t2));
+}
+
+function Tile::DistanceY(t1, t2){
+	return abs(AIMap.GetTileY(t1) - AIMap.GetTileY(t2));	
 }
 
 function Tile::EuclideanDistance(t1 , t2){

@@ -30,6 +30,7 @@ require("util/priority_queue/priority_queue.nut");
 require("util/priority_queue/binary_heap.nut");
 require("util/priority_queue/hash_heap.nut");
 require("util/priority_queue/two_level_hash_heap.nut");
+require("util/array.nut");
 require("util/binary_tree.nut");
 require("util/direction.nut");
 require("util/hash_table.nut");
